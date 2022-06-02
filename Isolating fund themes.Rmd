@@ -1,0 +1,384 @@
+---
+title: "moreeee"
+author: "Caroline Barto"
+date: '2022-04-19'
+output: html_document
+---
+```{r}
+library(stringr)
+#install.packages("arules")
+library(arules)
+#install.packages("arulesViz")
+library(arulesViz)
+```
+
+```{r}
+load("Recentdonors.rda")
+desig <- read.csv("DesigInfo.csv")
+data <- read.csv("Constituent_Designation_Summary.csv")
+des <- read.csv("Data.Fund.Summary.csv")
+
+#isolating relevant columns to be merged in 
+d <- desig[,c(1, 10)]
+dataT <- merge(last10, d, by.x ="DESIGNATIONLOOKUPID", by.y = "ï..DESIGNATIONLOOKUPID", all.x = TRUE)
+
+```
+
+# Isolating WOSU funds
+
+```{r}
+#creating list of unique funds under relevant category
+dataWOSU <- dataT[dataT$SDRABBREV == "WOSU",]
+WOSUFunds <- unique(as.character(dataWOSU$DESIGNATIONLOOKUPID))
+```
+
+```{r}
+#create list of WOSU funds each person donated to 
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataWOSU, toString)
+```
+
+
+```{r}
+#preparing data for apriori algorithm, creating an incidence matrix of funds.
+
+#set up matrix with every row being an individual and every column being a WOSU fund
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 31))
+colnames(df3) <- c("ID", WOSUFunds)
+
+#detecting individual funds from aggregated list
+
+#using greatly improves runtime.
+df3[, 1] <- newData[,1]
+for (i in 1:30)
+{
+  #populate entire column at once for every fund
+  df3[,i + 1] <- str_detect(newData[,2], WOSUFunds[i])
+}
+
+#transform from boolean to integer
+for(i in 2:31)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+colSums(df3)
+
+#rename columns to be more informative for others.
+names <- desig[desig[,1] %in% WOSUFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+```
+
+```{r}
+WOSU <- as.matrix(df3[,-1])
+
+#creating transactions and rules using apriori algorithm
+WOSUfunds <- as(WOSU, "transactions")
+
+summary(WOSUfunds)
+rulesWOSU <- apriori(WOSUfunds,  parameter = list(supp = 0.008, conf = 0.75, target = "rules"))
+
+plot(rulesWOSU, method = "paracoord")
+```
+
+Need to drop smaller funds
+
+# Isolating Cancer Funds
+Repeat process from WOSU 
+
+```{r}
+dataCancer <- dataT[dataT$SDRABBREV == "Cancer",]
+CancerFunds <- unique(as.character(dataCancer$DESIGNATIONLOOKUPID))
+
+CancerFunds <- CancerFunds[CancerFunds %in% des[des$donor.count>400, "fund.id"]]
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataCancer, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = length(CancerFunds) +1))
+colnames(df3) <- c("ID", CancerFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:length(CancerFunds))
+{
+  df3[,i + 1] <- str_detect(newData[,2], CancerFunds[i])
+}
+
+for(i in 2:ncol(df3))
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+colSums(df3)
+names <- desig[desig[,1] %in% CancerFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+```
+
+```{r}
+Cancer <- as.matrix(df3[,-1])
+
+Cfunds <- as(Cancer, "transactions")
+rulesC <- apriori(Cfunds,  parameter = list(supp = 0.008, conf = 0.75, target = "rules"))
+
+
+plot(rulesC, method = "paracoord")
+```
+
+# Isolating "Other" Funds
+
+```{r}
+dataOther <- dataT[dataT$SDRABBREV == "Other",]
+OtherFunds <- unique(as.character(dataOther$DESIGNATIONLOOKUPID))
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataOther, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 90))
+colnames(df3) <- c("ID", OtherFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:89)
+{
+  df3[,i + 1] <- str_detect(newData[,2], OtherFunds[i])
+}
+
+for(i in 2:90)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+colSums(df3)
+
+names <- desig[desig[,1] %in% OtherFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+```
+
+```{r}
+Other <- as.matrix(df3[,-1])
+
+Otfunds <- as(Other, "transactions")
+x <- summary(Otfunds)
+rulesother <- apriori(Otfunds,  parameter = list(supp = 0.005, conf = 0.1, target = "rules"))
+
+inspect(rulesother)
+x <-itemFrequency(Otfunds)
+x<- x[x > .002]
+unname(x)
+
+par(las = 1)
+par(mar=c(10,18,4,2))
+barplot(unname(x), names.arg = names(x), horiz = TRUE, col = "#e34a33", main = "Proportion of transactions with top four funds")
+
+inspect(head(Otfunds[size(Otfunds)==2], n = 30))
+```
+
+
+# Isolating Academic Affairs
+
+```{r}
+dataAA <- dataT[dataT$SDRABBREV == "Academic Affairs",]
+AAFunds <- unique(as.character(dataAA$DESIGNATIONLOOKUPID))
+
+#Removing low frequency funds
+AAFunds <- AAFunds[AAFunds %in% des[des$donor.count>50, "fund.id"]]
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataAA, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 195))
+colnames(df3) <- c("ID", AAFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:194)
+{
+  df3[,i + 1] <- str_detect(newData[,2], AAFunds[i])
+}
+
+for(i in 2:195)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+names <- desig[desig[,1] %in% AAFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+
+```
+
+```{r}
+AA <- as.matrix(df3[,-1])
+
+AcAfunds <- as(AA, "transactions")
+summary(AcAfunds)
+rulesAA <- apriori(AcAfunds,  parameter = list(supp = 0.005, conf = 0.2, target = "rules"))
+
+plot(rulesAA, method = "paracoord")
+```
+
+# Isolating Unrestricted Funds
+
+```{r}
+dataU <- dataT[dataT$SDRABBREV == "Unrestricted",]
+uFunds <- unique(as.character(dataU$DESIGNATIONLOOKUPID))
+
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataU, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 5))
+colnames(df3) <- c("ID", uFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:4)
+{
+  df3[,i + 1] <- str_detect(newData[,2], uFunds[i])
+}
+
+for(i in 2:5)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+colSums(df3)
+names <- desig[desig[,1] %in% uFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+```
+
+```{r}
+u <- as.matrix(df3[,-1])
+
+Unfunds <- as(u, "transactions")
+summary(Unfunds)
+rulesU <- apriori(Unfunds,  parameter = list(supp = 0.005, conf = 0.2, target = "rules"))
+
+inspect(rulesU)
+
+```
+
+
+# Isolating Alumni Association Funds
+
+```{r}
+dataAlum<- dataT[dataT$SDRABBREV == "Alumni Association",]
+AlumFunds <- unique(as.character(dataAlum$DESIGNATIONLOOKUPID))
+
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataAlum, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 119))
+colnames(df3) <- c("ID", AlumFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:118)
+{
+  df3[,i + 1] <- str_detect(newData[,2], AlumFunds[i])
+}
+
+for(i in 2:119)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+
+names <- desig[desig[,1] %in% AlumFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+
+
+```
+
+```{r}
+Al <- as.matrix(df3[,-1])
+
+Alfunds <- as(Al, "transactions")
+summary(Alfunds)
+rulesAlum <- apriori(Alfunds,  parameter = list(supp = 0.002, conf = 0.5, target = "rules"))
+
+plot(rulesAlum, method = "paracoord")
+```
+
+# Isolating Athletics Funds
+
+```{r}
+dataAth<- dataT[dataT$SDRABBREV == "Athletics",]
+AthFunds <- unique(as.character(dataAth$DESIGNATIONLOOKUPID))
+
+```
+
+```{r}
+
+newData <- aggregate(DESIGNATIONLOOKUPID~CONSTITUENTLOOKUPID, dataAth, toString)
+```
+
+
+```{r}
+df3 <- data.frame(matrix(nrow =nrow(newData), ncol = 341))
+colnames(df3) <- c("ID", AthFunds)
+
+
+df3[, 1] <- newData[,1]
+for (i in 1:340)
+{
+  df3[,i + 1] <- str_detect(newData[,2], AthFunds[i])
+}
+
+for(i in 2:341)
+{
+  df3[,i] <- as.integer(df3[,i])
+}
+names <- desig[desig[,1] %in% AthFunds,"public_name"]
+colnames(df3)[-1] <- names
+
+```
+
+```{r}
+Ath <- as.matrix(df3[,-1])
+
+Athlfunds <- as(Ath, "transactions")
+summary(Athlfunds)
+rulesAt <- apriori(Athlfunds,  parameter = list(supp = 0.003, conf = 0.66, target = "rules"))
+
+plot(rulesAt, method = "paracoord")
+
+```
+```{r}
+inspect(rulesWOSU)
+inspect(rulesC)
+inspect(rulesAA)
+inspect(rulesAlum)
+inspect(rulesAt)
+```
+
