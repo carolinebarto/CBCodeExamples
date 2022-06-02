@@ -1,0 +1,74 @@
+---
+title: "creatingVis"
+author: "Caroline Barto"
+date: "3/3/2022"
+output: html_document
+---
+```{r}
+library(tidyverse)
+#install.packages("bit64")
+library(bit64)
+library(ggplot2)
+```
+
+```{r}
+load("donors.Rdata")
+```
+
+
+
+```{r}
+donors3to99$took_gap <- rep(0, nrow(donors3to99))
+donors3to99[donors3to99$param_ID_FISCALYEAR - donors3to99$FY_DONOR_GIFT_LAST > 1,"took_gap"] <- 1
+```
+
+```{r}
+y <- donors3to99[donors3to99$took_gap == 1,]
+y$GapLength <- y$param_ID_FISCALYEAR - y$FY_DONOR_GIFT_LAST
+y$LeadershipTier <- as.factor(y$param_ID_DATECOMPARETYPE)
+ggplot(data = y[y$GapLength < 50,]) + geom_density(aes(x = GapLength, fill = LeadershipTier), alpha = .5) + geom_vline(xintercept= na.omit(median(y[y$param_ID_DATECOMPARETYPE ==1, "GapLength"])), col = "#36AD97", size = 1.5) +geom_vline(xintercept= na.omit(median(y[y$param_ID_DATECOMPARETYPE ==2, "GapLength"])), col = "#E29510", size = 1.5) + scale_fill_manual(values= c("1" = "#36AD97", "2" = "#E29510")) + theme_minimal(base_size = 15) + labs(title = "Lenth of gap in years by whether they made the jump")
+
+
+```
+
+
+```{r}
+donors3to99$gapflip <- rep(0, nrow(donors3to99))
+donors3to99[donors3to99$took_gap == 1 & donors3to99$param_ID_DATECOMPARETYPE == 1,]$gapflip <- 1
+
+merge <- left_join(donors3to99, constituents, by=c("CONSTITUENTLOOKUPID"="ID_CONSTITUENTLOOKUPID"))
+merge$lastAge <- merge$FY_DONOR_GIFT_LAST - merge$VAL_CONST_YOB_CLEAN
+merge$firstAge <- merge$FY_DONOR_GIFT_FIRST - merge$VAL_CONST_YOB_CLEAN
+merge$donatingYears <- merge$FY_DONOR_GIFT_LAST -  merge$FY_DONOR_GIFT_FIRST 
+```
+
+
+```{r}
+gapflip <- donors3to99 %>% group_by(took_gap, param_ID_DATECOMPARETYPE) %>% count
+colnames(gapflip) <- c("TookGap", "TookJump", "n")
+gapflip$TookGap <- as.factor(gapflip$TookGap)
+gapflip$TookJump <- as.factor(gapflip$TookJump)
+ggplot(data = gapflip, aes(fill = TookGap, x = TookJump, y = n)) + geom_bar(position = "fill", stat = "identity") + labs(title = "Having a one year gap by whether they jumped to 3k") + theme_minimal()
+
+```
+```{r}
+merge <- left_join(donors3to99, constituents, by=c("CONSTITUENTLOOKUPID"="ID_CONSTITUENTLOOKUPID"))
+merge$lastAge <- merge$FY_DONOR_GIFT_LAST - merge$VAL_CONST_YOB_CLEAN
+merge$firstAge <- merge$FY_DONOR_GIFT_FIRST - merge$VAL_CONST_YOB_CLEAN
+merge$donatingYears <- merge$FY_DONOR_GIFT_LAST -  merge$FY_DONOR_GIFT_FIRST 
+gapPeople <- merge[merge$took_gap == 1,]
+merge$flipgap <- paste(merge$param_ID_DATECOMPARETYPE, merge$took_gap)
+
+merge[merge$flipgap == "1 0", "flipgap"] <- "jumpConst"
+merge[merge$flipgap == "2 0", "flipgap"] <- "noJumpConst"
+merge[merge$flipgap == "1 1", "flipgap"] <- "jumpGap"
+merge[merge$flipgap == "2 1", "flipgap"] <- "noJumpGap"
+par(mfrow=c(1,2))
+ggplot(data = merge[,c("flipgap", "donatingYears")])+geom_boxplot(aes(x = flipgap, y = donatingYears, fill = flipgap)) + theme_minimal(base_size = 21) + labs(title = "Active Years by Donating Style", y = "Active Years") + scale_fill_manual(values= c("jumpConst" = "#36AD97", "noJumpConst" = "#E29510", "jumpGap" = "#23DCC0", "noJumpGap" = "#E2DE00")) + theme(legend.position = "none")
+ggplot(data = merge[,c("flipgap", "firstAge")])+geom_boxplot(aes(x = flipgap, y = firstAge, fill = flipgap)) + theme_minimal(base_size = 21) + labs(title = "Age of First Donation by Donating Style") + geom_hline(yintercept = median(na.omit(merge[merge$flipgap == "jumpConst", "firstAge"])), col = "red") + scale_fill_manual(values= c("jumpConst" = "#36AD97", "noJumpConst" = "#E29510", "jumpGap" = "#23DCC0", "noJumpGap" = "#E2DE00")) + theme(legend.position = "none")
+
+
+```
+
+
+
