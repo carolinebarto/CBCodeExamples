@@ -1,0 +1,111 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r include = FALSE}
+#install.packages("nycflights13")
+library(nycflights13)
+library(ggplot2)
+library(dplyr)
+
+flightData <- flights
+planeMeta <- planes
+
+#introducing size value from natrual breaks in distribution
+planeMeta$size <- rep("", nrow(planeMeta))
+
+planeMeta[planeMeta$seats < 50,]$size <- "Small"
+planeMeta[planeMeta$seats >= 50 & planeMeta$seats < 100,]$size <- "Medium"
+planeMeta[planeMeta$seats >= 100 & planeMeta$seats < 200,]$size <- "Large"
+planeMeta[planeMeta$seats >= 200,]$size <- "xLarge"
+
+planeMeta$age <- 2013 - planeMeta$year
+
+
+planeFlights <- merge(flightData, planeMeta, by = "tailnum")
+
+
+
+#removing missing values from variables of interest
+planeFlights <- subset(planeFlights, !is.na(year.y))
+planeFlights <- subset(planeFlights, !is.na(dep_delay))
+
+#making a binary variable to determine if the flight was delayed 
+planeFlights$delayed <- ifelse(planeFlights$dep_delay >=15, "yes", "no")
+
+#misery shows a weighted affect of the delay
+planeFlights$misery <- planeFlights$dep_delay * planeFlights$seats
+
+planeFlights$speed <- planeFlights$distance / planeFlights$air_time
+
+
+
+oldPlanes <- planeMeta[planeMeta$age > 11,]
+newPlanes <- planeMeta[planeMeta$age <= 11,]
+
+planeFlights$ageCat <- rep(NA, nrow(planeFlights))
+planeFlights[planeFlights$age > 11,]$ageCat <- "Old"
+planeFlights[planeFlights$age <= 11,]$ageCat <- "New"
+
+```
+
+We have established that small and medium sized flights account for a larger number of delayed flights than the large and extra large planes. Before we claim that all medium sized planes are at risk, we must determine if the these planes have a higher proportion within their size groups. Afterall, planes with 50 to 100 seats would be more popular since it is a more comfortable ride. 
+
+
+
+```{r}
+#determining amounts of delayed flights based on age and seize
+cats <- planeFlights[,c(28,30,32) ]
+cats$ageSize <- paste(cats$size, cats$ageCat)
+pairs <- cats%>%group_by_all%>%count
+
+ggplot(data = pairs, aes(fill = delayed, x = size, y = n)) + geom_bar(position = "fill", stat = "identity") + labs(title = "Proportion of Flights delayed by size") + scale_fill_manual(values = c("yes" = "#E3242B", "no" = "#378805")) + theme_bw()
+```
+  
+We can see quite clearly Medium flights do in fact have a higher proportion of delayed flights. In order to get to the route of this problem, we must determine the attributes of either the planes or the enviornment on the day of the flight occurring to see when there is a higher likelihood of the flight being delayed. We will begin by investigating the attributes of the planes. When studying the meta data of the plane, there exists an uneven representation of different sorts of planes. For example, around $99\%$ of flights are flown with an engine that has a 2 cylinder engine. For this reason, meaningful analysis exists mainly within the age of the plane and within the top five manufacturers.  
+
+A plane was considered "old" if it had above average age in 2013. For us, this means the plane was made eleven years prior in 2002. Throughout our analysis, we can determine that while age may not be the sole determination for the existence of a delay, age had different effects on the various sizes of the planes.
+
+
+
+```{r echo = FALSE, figures-side, fig.show="hold", out.width="50%"}
+
+ggplot(data = pairs, aes(fill = delayed, x = ageSize, y = n)) + geom_bar(position = "fill", stat = "identity") + labs(title = "Proportion of Flights delayed by size and age", x = "") + scale_fill_manual(values = c("yes" = "#E3242B", "no" = "#378805")) + theme_bw()+theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+
+```
+
+While Newer flights do have a higher proportion of delayed flights in the "Small", and "Large" categories, this relationship is reversed for the Medium-sized planes. We can see that old medium-sized planes have a significantly higher proportion of delayed flights. 
+
+```{r echo= FALSE}
+NMDelay <- 12855
+NMTotal <- 44423
+OMDelay <- 7379
+OMTotal <- 23355
+prop.test(x = c(NMDelay, OMDelay), n = c(NMTotal, OMTotal), alternative = "less")
+```
+Also, investigating the top five manufacturers reveals that older EMBRAER planes have a worse performance than the newer ones.
+```{r}
+manufacturers <- planeFlights%>%group_by(manufacturer)%>%count
+topMan <- manufacturers[manufacturers$n >10000,]
+topMANflights <- planeFlights[planeFlights$manufacturer %in% topMan$manufacturer,]
+topdelayed <- topMANflights%>%group_by(manufacturer, delayed, ageCat)%>%count
+
+topdelayed$manAge <- paste(topdelayed$manufacturer, topdelayed$ageCat)
+ggplot(data = topdelayed, aes(fill = delayed, x = manAge, y = n)) + geom_bar(position = "fill", stat = "identity") + labs(title = "Flights delayed by manufacturer and age", x = "") + scale_fill_manual(values = c("yes" = "#E3242B", "no" = "#378805")) + theme_bw()+theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+
+```
+
+We are also interested in examining age and size in the context of our misery index. Since our large and extra large sized flights have inherently more people waiting for each flight, it is in our best interest to work on ways to minimize those wait times. 
+
+```{r echo = FALSE}
+misCats <- cats[, c(1,3)]
+misCats$misery <- planeFlights$misery
+
+sizeAgeAvg <- misCats%>%group_by(size, ageCat)%>%summarise(avg_mis = mean(misery))
+ggplot(data = sizeAgeAvg) + geom_bar(aes(x = reorder(size, +avg_mis), y = avg_mis, fill = ageCat), position = "dodge", stat = "identity") + theme_bw() + labs(title = "Average Misery by Age and Size", y = "Average Misery", x = "Plane size by Seats")
+```
+
+It is interesting to note that on average, newer planes in the large, medium, and small categories have higher misery, and yet old extra large planes have a significantly higher misery value than the newer ones.
+While the Port Authority will likely be unable to improve the quality of newer planes, they may be able encourage carriers to replace older planes in certain categories, names medium and extra large planes
