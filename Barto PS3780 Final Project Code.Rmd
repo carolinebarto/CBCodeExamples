@@ -1,0 +1,243 @@
+---
+title: "PS3780 Final Project"
+author: "Caroline Barto"
+date: "4/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(maps)
+library(ggplot2)
+```
+
+
+## Studying Differences in Racial Data
+
+```{r}
+
+REPS_SIMPLE <- read_csv("REPS_SIMPLE.csv")
+EducationStateCensus <- read_csv("EducationStateCensus.csv")
+StateDemographics <- read_csv("StateDemographics.csv")
+
+Rep_Race <- REPS_SIMPLE[, 8:12]
+Rep_Race$State <- REPS_SIMPLE$State
+
+State_Race <- StateDemographics[, 32:39]
+State_Race$State <- StateDemographics$`Geographic Area Name`
+
+All_Race <- merge(Rep_Race, State_Race, by="State")
+
+colnames(All_Race) <- c("State", "RWhite", "RBlack", "RAsian", "RIndigenous", "RHispanic", "SHispanic", "SWhite", "SBlack", "SIndigenous", "SAsian", "SHaw", "SOther", "SMixed")
+
+All_Race$SIndigenous <- All_Race$SIndigenous + All_Race$SHaw
+
+All_Race[, 7:14] <- All_Race[, 7:14] / 100
+
+All_Race$SumSquaredDiff <- (All_Race$RWhite - All_Race$SWhite)^2 + (All_Race$RBlack - All_Race$SBlack)^2 + (All_Race$RAsian - All_Race$SAsian)^2 + (All_Race$RIndigenous - All_Race$SIndigenous)^2 + (All_Race$RHispanic - All_Race$SHispanic)^2 
+
+All_Race$Race_Distance <- sqrt(All_Race$SumSquaredDiff)
+
+All_Race$State = tolower(All_Race$State)
+
+map <- ggplot(data = All_Race)
+
+map <- map +
+  geom_map(color="white", aes(map_id = State, fill = Race_Distance), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "Purples", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "Difference between Racial Demographics")
+
+
+```
+
+## Studying Difference in Gender Data
+```{r}
+Rep_Gender <- REPS_SIMPLE[, 6:7]
+Rep_Gender$State <- tolower(REPS_SIMPLE$State)
+
+State_Gender <- StateDemographics[, 3:4]/100
+State_Gender$State <- tolower(StateDemographics$`Geographic Area Name`)
+
+All_Gender <- merge(Rep_Gender, State_Gender, by="State")
+colnames(All_Gender) <- c("State", "RFem", "RMale", "SMale", "SFem")
+
+All_Gender$SumSquaredDiff <- (All_Gender$RFem - All_Gender$SFem)^2 + (All_Gender$RMale - All_Gender$SMale)^2
+All_Gender$Gender_Distance <- sqrt(All_Gender$SumSquaredDiff)
+
+map <- ggplot(data = All_Gender)
+
+map <- map +
+  geom_map(color="white", aes(map_id = State, fill = Gender_Distance), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "YlRd", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "Difference between Sex Demographics")
+
+```
+
+## Differences in Educational Data
+
+```{r}
+
+Reps_Edu <- REPS_SIMPLE[, 13:16]
+Reps_Edu$State <- tolower(REPS_SIMPLE$State)
+
+State_Edu <- EducationStateCensus[, 10:14]/100
+State_Edu$`25+ some college` <- State_Edu$`25+ some college` + State_Edu$`25+ AS`
+State_Edu$State <- tolower(EducationStateCensus$`Geographic Area Name`)
+
+All_Edu <- merge(Reps_Edu, State_Edu, by="State")
+colnames(All_Edu) <- c("State", "RHighSchool", "RSomeCollege", "RBA", "RMAorHigher", "SHighSchool", "SSomeCollege", "SAS", "SBA", "SMAorHigher")
+
+All_Edu$SumSquaredDiff <- (All_Edu$RHighSchool - All_Edu$SHighSchool)^2 + (All_Edu$RSomeCollege - All_Edu$SSomeCollege)^2 + (All_Edu$RBA - All_Edu$SBA)^2 + (All_Edu$RMAorHigher - All_Edu$SMAorHigher)^2
+
+All_Edu$Edu_Distance <- sqrt(All_Edu$SumSquaredDiff)
+
+map <- ggplot(data = All_Edu)
+
+map <- map +
+  geom_map(color="white", aes(map_id = State, fill = Edu_Distance), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "YlRd", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "Difference between Educational Status")
+
+```
+
+## Differences in Age Distribution
+
+```{r}
+Reps_Age <- REPS_SIMPLE[, 22:29]
+Reps_Age$State <- tolower(REPS_SIMPLE$State)
+
+State_Age <- StateDemographics[, 13:20]
+State_Age$State <- tolower(StateDemographics$`Geographic Area Name`)
+
+All_Age <- merge(Reps_Age, State_Age, by="State")
+colnames(All_Age) <- c("State", "R25to34", "R35to44", "R45to54", "R55to59", "R60to64", "R65to74", "R75to84", "R85Over", "S25to34", "S35to44", "S45to54", "S55to59", "S60to64", "S65to74", "S75to84", "S85Over")
+
+All_Age$SumSquaredDiff <- (All_Age$R25to34 - All_Age$S25to34)^2 + (All_Age$R35to44 - All_Age$S35to44)^2  + (All_Age$R45to54 - All_Age$S45to54)^2  + (All_Age$R55to59 - All_Age$S55to59)^2 + (All_Age$R60to64 - All_Age$S60to64)^2 + (All_Age$R65to74 - All_Age$S65to74)^2 + (All_Age$R75to84 - All_Age$S75to84)^2 + (All_Age$R85Over - All_Age$S85Over)^2
+
+All_Age$Age_Distance <- sqrt(All_Age$SumSquaredDiff)
+
+
+map <- ggplot(data = All_Age)
+
+map <- map +
+  geom_map(color="white", aes(map_id = State, fill = Age_Distance), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "YlRd", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "Difference Between Age Distribution")
+
+All_Age$RMed <- REPS_SIMPLE$`Median Age`
+All_Age$SMed <- StateDemographics$`Median Age`
+
+a <- ggplot(data = All_Age)
+a <- a + geom_point(aes(x = SMed, y = RMed, cex = Age_Distance)) + xlim(30, 50) + ylim(30, 80)
+a <- a + geom_abline(slope = 1, intercept = 0, col = "red") 
+a + labs(title = "Median Age of Representatives and States", x = "State Median Age", y = "Representatives Median Age")
+
+
+```
+
+
+## Finding a single measure for Difference
+
+```{r}
+Differences <- data.frame(matrix(data = NA, nrow=50))
+colnames(Differences)[1] <- "State"
+Differences$State <- tolower(REPS_SIMPLE$State)
+
+Differences$SSE_Race <- All_Race$SumSquaredDiff
+Differences$SSE_Sex <- All_Gender$SumSquaredDiff
+Differences$SSE_Edu <- All_Gender$SumSquaredDiff
+Differences$SSE_Age <- All_Gender$SumSquaredDiff
+Differences$Distance <- sqrt(Differences$SSE_Race + Differences$SSE_Sex + Differences$SSE_Edu + Differences$SSE_Age)
+
+map <- ggplot(data = Differences)
+
+map <- map +
+  geom_map(color="white", aes(map_id = State, fill = Distance), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "Difference between States and Representatives")
+```
+
+
+```{r}
+
+map <- ggplot(data = REPS_SIMPLE)
+
+map <- map +
+  geom_map(color="white", aes(map_id = tolower(State), fill = Reps), map = map_data("state"), show.legend = TRUE) +
+  expand_limits(x = map_data("state")$long, y = map_data("state")$lat) +
+  scale_fill_distiller(palette = "Blues", direction = 1) +
+  labs(x="", y= "") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.text.y = element_blank(), axis.ticks.y = element_blank())
+map + labs(title = "States with the most Representatives")
+```
+
+## Looking for interesting factors
+
+```{r}
+Differences$Reps <- REPS_SIMPLE$Reps
+Differences$Election <- REPS_SIMPLE$'2020Election'
+
+p <- ggplot(data = Differences)
+
+p <- p + geom_point(aes(x=Reps, y = Distance, col = Election)) + scale_color_manual(values=c("Blue","Red"))
+
+p + labs(title = "Number of Representatives against Overall Distance")
+
+```
+
+
+```{r}
+d <- ggplot(data = Differences, aes(x=Distance, fill = Election))
+
+d <- d + geom_density(alpha=.4) + scale_fill_manual(values=c("Blue","Red"))
+
+d + labs(title= "Distance Distribution by 2020 Election Results")
+
+```
+
+
+```{r}
+Differences$IncomeGap <- EducationStateCensus$`M - F Income`
+
+
+p <- ggplot(data = Differences)
+
+p <- p + geom_point(aes(x=IncomeGap, y = Distance, col = Election)) + scale_color_manual(values=c("Blue","Red"))
+
+p + labs(title = "Income Gap against Overall Distance")
+
+
+```
+
+```{r}
+Differences$Income <- EducationStateCensus$`25+ annual income`
+
+p <- ggplot(data = Differences)
+
+p <- p + geom_point(aes(x=Income, y = Distance, col = Election)) + scale_color_manual(values=c("Blue","Red"))
+
+p + labs(title = "Income against Overall Distance")
+
+
+```
